@@ -30,7 +30,7 @@ async def on_ready():
 
 
 async def reply_to_mention(message):
-    mentioned_user = message.mentions[0]  # checks for the first mention
+    mentioned_user = message.mentions[0]
     mentioned_name = mentioned_user.display_name
     author_id = message.author.id
 
@@ -63,7 +63,6 @@ async def generate_image(prompt):
 def sync_generate_image(prompt):
     image = pipe(prompt).images[0]
 
-    # Save image to BytesIO buffer (in ram)
     buffer = BytesIO()
     image.save(buffer, format='PNG')
     buffer.seek(0)
@@ -72,7 +71,7 @@ def sync_generate_image(prompt):
 
 def load_restricted_channels():
     if not os.path.exists(DATA_FILE):
-        return {}  # Returns empty dictionary
+        return {}
 
     with open(DATA_FILE, 'r') as f:
         return json.load(f)
@@ -128,7 +127,7 @@ async def on_message(message):
     print(f"Attachments: {message.attachments}")
     print(f"Mentions: {message.mentions}")
 
-    if message.author == client.user:  # prevents the bot from responding to its own messages avoiding loops
+    if message.author == client.user:
         return
     guild_id = str(message.guild.id)
     channel_id = str(message.channel.id)
@@ -141,7 +140,7 @@ async def on_message(message):
         command_prefix = "*"
         if message.content.startswith(command_prefix):
             command = message.content[len(command_prefix):].strip()
-            await check_command(command, message)  # calls Check_command function
+            await check_command(command, message)
 
         if message.content.startswith("!"):
             if message.mentions:
@@ -192,8 +191,8 @@ async def generate_reply(user_input, user_id, message):
 
 
 async def check_command(command, message):
-    owner_id = message.guild.owner_id  # gets the owner id
-    owner = await client.fetch_user(owner_id)  # uses the owner id to fetch the owner
+    owner_id = message.guild.owner_id
+    owner = await client.fetch_user(owner_id)
 
     match command.lower():
         case "help":
@@ -240,22 +239,20 @@ async def check_command(command, message):
             await message.channel.send(embed=embed)
 
         case "roles":
-            guild = message.guild  # separating strings with the join method
-            roles_list = ' '.join([f"<@&{role.id}>\n" for role in guild.roles])  # used list comprehension
+            guild = message.guild
+            roles_list = ' '.join([f"<@&{role.id}>\n" for role in guild.roles])  # !!!!
 
             embed = discord.Embed(
                 title="Role list", description=roles_list, color=discord.Color.green())
             await message.channel.send(embed=embed)
 
-        case _ if command.startswith("gif"):  # "_" Only checks if the command starts with "gif" | Handles dynamic arguments in match statments
+        case _ if command.startswith("gif"):  # !!!!
             search_q = command[4:] or "memes"
 
             response = requests.get(f"https://tenor.googleapis.com/v2/search?q={search_q}&key={os.getenv("TENOR_API_KEY")}&limit=25")
 
-            # Check if the response is valid
             if response.status_code == 200:
 
-                # Search through all the different formats, looks for .gif and extract the url
                 gif_url = random.choice(response.json()['results'])['media_formats']['gif']['url']
 
                 await message.channel.send(gif_url)
@@ -285,7 +282,6 @@ async def check_command(command, message):
             embed.set_image(url="https://i.imgur.com/QvTVaD8.png")
             await message.channel.send(embed=embed)
         case "admincmd":
-            # checks if the message author is the owner
             if message.author == owner or any([  # could also use (message.author.id == owner.id) to compare the IDs
                 message.author.guild_permissions.administrator,
                 message.author.guild_permissions.manage_channels,
