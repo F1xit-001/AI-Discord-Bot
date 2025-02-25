@@ -16,8 +16,14 @@ DATA_FILE = "restricted_channels.json"
 tenor_api_key = os.environ.get("TENOR_API_KEY")
 
 MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
-pipe = StableDiffusionXLPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16)
-pipe = pipe.to("cuda")
+pipe = None
+
+
+def get_pipe():
+    global pipe
+    if pipe is None:
+        pipe = StableDiffusionXLPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to("cuda")
+    return pipe
 
 
 intents = discord.Intents.default()
@@ -61,8 +67,9 @@ async def generate_image(prompt):
 
 
 def sync_generate_image(prompt):
-    image = pipe(prompt).images[0]
+    image = get_pipe()(prompt).images[0]
 
+    # Save image to BytesIO buffer (in ram)
     buffer = BytesIO()
     image.save(buffer, format='PNG')
     buffer.seek(0)
@@ -127,7 +134,7 @@ async def on_message(message):
     print(f"Attachments: {message.attachments}")
     print(f"Mentions: {message.mentions}")
 
-    if message.author == client.user:
+    if message.author == client.user:  # no bot loops
         return
     guild_id = str(message.guild.id)
     channel_id = str(message.channel.id)
@@ -190,9 +197,13 @@ async def generate_reply(user_input, user_id, message):
     return bot_reply
 
 
+def has_admin_permissions(member):
+    return member.guild_permissions.administrator or member.guild_permissions.manage_channels
+
+
 async def check_command(command, message):
-    owner_id = message.guild.owner_id
-    owner = await client.fetch_user(owner_id)
+    owner_id = message.guild.owner_id  # gets the owner id
+    owner = await client.fetch_user(owner_id)  # uses the owner id to fetch the owner
 
     match command.lower():
         case "help":
@@ -246,11 +257,10 @@ async def check_command(command, message):
                 title="Role list", description=roles_list, color=discord.Color.green())
             await message.channel.send(embed=embed)
 
-        case _ if command.startswith("gif"):  # !!!!
+        case _ if command.startswith("gif"):  # "_" !!!!
             search_q = command[4:] or "memes"
 
-            response = requests.get(f"https://tenor.googleapis.com/v2/search?q={search_q}&key={os.getenv("TENOR_API_KEY")}&limit=25")
-
+            response = requests.get(f"https://tenor.googleapis.com/v2/search?q={search_q}&key={tenor_api_key}&limit=25")
             if response.status_code == 200:
 
                 gif_url = random.choice(response.json()['results'])['media_formats']['gif']['url']
@@ -281,12 +291,11 @@ async def check_command(command, message):
             embed.add_field(name="Output:", value="**-------------------**", inline=False)
             embed.set_image(url="https://i.imgur.com/QvTVaD8.png")
             await message.channel.send(embed=embed)
+
         case "admincmd":
-            if message.author == owner or any([  # could also use (message.author.id == owner.id) to compare the IDs
-                message.author.guild_permissions.administrator,
-                message.author.guild_permissions.manage_channels,
-                message.author.guild_permissions.manage_guild
-            ]):
+            if not has_admin_permissions(message.author):
+                await message.channel.send("You don't have the permissions to use this command.", delete_after=2)
+            else:
                 embed = discord.Embed(title="Admin Commands", color=discord.Color.gold())
                 embed.add_field(name="<a:uncheck_raveninha:1343471068882669609> *restrict 'Channel id'",
                                 value="Specify which channels the bot will be restricted on",
@@ -296,10 +305,7 @@ async def check_command(command, message):
                                 inline=False)
                 embed.add_field(name="📌 Note:", value="Users with **Manage Channels, Administrator** permissions will be"
                                                      " able to Restrict/De-restrict channels", inline=False)
-
                 await message.channel.send(embed=embed)
-            else:
-                await message.channel.send("You don't have the permissions to use this command.", delete_after=2)
 
         case _ if command.startswith("restrict"):
             args = command.split()
@@ -307,13 +313,10 @@ async def check_command(command, message):
                 await message.channel.send("Please provide a channel ID to restrict.")
                 return
             channel_id = args[1]
-            if message.author == owner or any([
-                message.author.guild_permissions.administrator,
-                message.author.guild_permissions.manage_channels
-            ]):
-                await restrict_channel(message, channel_id)
+            if not has_admin_permissions(message.author):
+                await message.channel.send("You don't have the permissions to use this command.", delete_after=2)
             else:
-                await message.channel.send("You don't have the permission to use this command.", delete_after=2)
+                await restrict_channel(message, channel_id)
 
         case _ if command.startswith("derestrict"):
             args = command.split()
@@ -321,13 +324,10 @@ async def check_command(command, message):
                 await message.channel.send("Please provide a channel ID to de-restrict.")
                 return
             channel_id = args[1]
-            if message.author == owner or any([
-                message.author.guild_permissions.administrator,
-                message.author.guild_permissions.manage_channels
-            ]):
-                await derestrict_channel(message, channel_id)
-            else:
+            if not has_admin_permissions(message.author):
                 await message.channel.send("You don't have the permissions to use this command.", delete_after=2)
+            else:
+                await derestrict_channel(message, channel_id)
 
 bot_token = os.getenv("BOT_TOKEN")
 client.run(bot_token)
